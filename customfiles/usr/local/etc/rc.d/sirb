@@ -1,0 +1,48 @@
+#!/bin/sh
+
+# PROVIDE: sirb
+# REQUIRE: NETWORKING SERVERS DAEMON
+# BEFORE:  LOGIN
+# KEYWORD: shutdown
+
+# Taken from http://habrahabr.ru/post/137857/
+
+. /etc/rc.subr
+
+name="sirb"
+node="/usr/local/bin/node"
+workdir="/app/sirb"
+script="index.js"
+
+rcvar=sirb_enable
+#extra_commands="status"
+
+start_cmd="start"
+#status_cmd="status"
+#stop_cmd="stop"
+#restart_cmd="restart"
+
+load_rc_config $name
+eval "${rcvar}=\${${rcvar}:-'NO'}"
+
+start()
+{
+  su -m nobody -c "${node} ${workdir}/${script} >/tmp/node.log 2>/tmp/node.err &"
+}
+
+#status()
+#{
+#  su -m nodejs -c "exec ${forever} list"
+#}
+#
+#stop()
+#{
+#  su -m nodejs -c "exec ${forever} --sourceDir ${workdir} stop ${script}"
+#}
+#
+#restart()
+#{
+#  su -m nodejs -c "exec ${forever} --sourceDir ${workdir} restart ${script}"
+#}
+
+run_rc_command "$1"
