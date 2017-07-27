@@ -27,7 +27,7 @@ eval "${rcvar}=\${${rcvar}:-'NO'}"
 
 start()
 {
-  su -m nobody -c "${node} ${workdir}/${script} >/tmp/node.log 2>/tmp/node.err &"
+  su -m nobody -c "${node} ${workdir}/${script} >& /tmp/node.log &"
 }
 
 #status()
