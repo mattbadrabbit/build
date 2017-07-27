@@ -1,6 +1,6 @@
 .PHONY: clean iso packages customfiles
 
-iso: /tmp/.cdrom mfsbsd-2.3/conf/rc.conf packages customfiles
+iso: /dev/md10 mfsbsd-2.3/conf/rc.conf packages customfiles
 	cd mfsbsd-2.3; \
 	make iso BASE=/tmp/cdrom/usr/freebsd-dist/ PKG_STATIC=/usr/local/sbin/pkg-static MFSROOT_MAXSIZE=250m
 
@@ -18,9 +18,8 @@ mfsbsd-2.3: /usr/local/bin/wget
 FreeBSD-11.0-RELEASE-amd64-disc1.iso: /usr/local/bin/wget
 	wget https://download.freebsd.org/ftp/releases/amd64/amd64/ISO-IMAGES/11.0/FreeBSD-11.0-RELEASE-amd64-disc1.iso
 
-/tmp/.cdrom: FreeBSD-11.0-RELEASE-amd64-disc1.iso
+/dev/md10: FreeBSD-11.0-RELEASE-amd64-disc1.iso
 	(mdconfig -a -t vnode -u 10 -f FreeBSD-11.0-RELEASE-amd64-disc1.iso 2> /dev/null && mkdir -p /tmp/cdrom && mount_cd9660 /dev/md10 /tmp/cdrom) || true
-	touch /tmp/.cdrom
 
 clean:
 	cd mfsbsd-2.3; \
