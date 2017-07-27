@@ -24,7 +24,7 @@ FreeBSD-11.0-RELEASE-amd64-disc1.iso: /usr/local/bin/wget
 clean:
 	cd mfsbsd-2.3; \
 	make clean; \
-	rm mfsbsd-2.3/mfsbsd-11.0-RELEASE-p1-amd64.iso
+	rm -f mfsbsd-11.0-RELEASE-p1-amd64.iso
 
 packages:
 	mkdir -p packages
