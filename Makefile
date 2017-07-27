@@ -35,3 +35,9 @@ packages:
 customfiles:
 	rm -rf mfsbsd-2.3/customfiles
 	cp -r customfiles mfsbsd-2.3/
+
+install:
+	pkg install python36
+	python3.6 -m ensurepip
+	pip3 install pyyaml
+	pip3 install jinja2

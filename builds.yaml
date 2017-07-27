@@ -1,0 +1,7 @@
+---
+nodejsproject:
+  repo: https://github.com/mattbadrabbit/nodejsproject.git
+  script: /bin/sh foo.sh
+  flavors:
+    chop-production:
+      some_var: foo
