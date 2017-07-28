@@ -1,7 +1,10 @@
 ---
 nodejsproject:
   repo: https://github.com/mattbadrabbit/nodejsproject.git
+  # the command to run inside the git repo of the project to bootstrap it for the build process
   script: /bin/sh foo.sh
+  # the location of the packages inside the git repo that the app expects to be in the OS
+  packages: packages.txt
   flavors:
     chop-production:
       some_var: foo

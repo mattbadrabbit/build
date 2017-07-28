@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# PROVIDE: sirb
+# PROVIDE: {{ app_name }}
 # REQUIRE: NETWORKING SERVERS DAEMON
 # BEFORE:  LOGIN
 # KEYWORD: shutdown
@@ -9,12 +9,12 @@
 
 . /etc/rc.subr
 
-name="sirb"
+name="{{ app_name }}"
 node="/usr/local/bin/node"
-workdir="/app/sirb"
+workdir="/opt/{{ app_name }}"
 script="index.js"
 
-rcvar=sirb_enable
+rcvar={{ app_name }}_enable
 #extra_commands="status"
 
 start_cmd="start"
