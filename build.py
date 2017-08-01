@@ -13,6 +13,7 @@ import io
 from datetime import datetime
 import sys
 import argparse
+from urllib.parse import urlparse
 import yaml
 import subprocess
 import tempfile
@@ -53,7 +54,8 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-l", "--log", help="Log level")
-    parser.add_argument("-a", "--app", help="Specify the app to build", required=True)
+    parser.add_argument("-r", "--repo", help="Path/URL to the repo", default=".")
+    parser.add_argument("-I", "--in-place", help="If --repo is a file path, this does repo operations in place", default=".")
     parser.add_argument("-f", "--flavor", help="Specify the flavor of the app", required=True)
     parser.add_argument("-v", "--version", help="The tag/version of the app to build")
     parser.add_argument("-p", "--pause", help="Pause before the mfs make process, so you can inspect the tmp dir")
@@ -63,54 +65,32 @@ if __name__ == "__main__":
         logging.basicConfig(stream=sys.stdout)
         logger.setLevel(args.log)
 
-    with open("builds.yaml", 'r') as stream:
-        try:
-            builds = yaml.load(stream)
-            print(builds)
-        except yaml.YAMLError as exc:
-            print(exc)
-            exit(1)
+    repo_parts = urlparse(args.repo)
+    if args.in_place and repo_parts.scheme != "file":
+        fatal_error("If you use the -in-place/-I option, the --repo/-r argument must start with file://")
 
-    # argument checking
-    if args.app not in builds:
-        fatal_error("App with name '%s' not found in builds.yaml. Choices are: %s" % (args.app, ", ".join(builds.keys())))
-
-    app = args.app
-
-    build = builds[args.app]
-    flavors = build.get("flavors", {})
-    if args.flavor not in flavors:
-        fatal_error("Flavor with name '%s' not found for the '%s' app. Choices are: %s" % (args.flavor, args.app, ", ".join(flavors)))
-    flavor = build['flavors'][args.flavor]
-
-    if not build.get("repo"):
-        fatal_error("The 'repo' key is missing from the YAML for the %s app" % (args.app))
 
     # We build a directory which will eventually include all the stuff we need to build the BSD image
     # It includes the interpolated customfiles (with the repo's source code) and packages
-    repo = build['repo']
+    repo = args.repo
     with tempfile.TemporaryDirectory(suffix=None, prefix="build-" + args.app + "-", dir=None) as tmp_dir:
         tmp_dir = pathlib.Path(tmp_dir)
 
-        custom_files_dir = tmp_dir / "customfiles"
-        shutil.copytree(here / "customfiles", custom_files_dir)
-
-        # walk all the custom files, and customize them with Jinja
-        for d, dirs, files in os.walk(custom_files_dir):
-            for f in files:
-                full_path = os.path.join(d, f)
-                render_to_file(full_path, full_path, **flavor, app_name=app, flavor_name=args.flavor)
-
-        # now do all the git stuff
-        git_dir = tmp_dir / "src"
-        os.mkdir(git_dir)
+        git_dir = tmp_dir / "src" if not args.in_place else pathlib.Path(repo_parts.netloc)
+        os.makedirs(git_dir)
         repo_cmd = lambda *args, **kwargs: subprocess.call(args, cwd=git_dir, **kwargs)
 
-        # clone the repo
-        logger.debug("Checking out the repo")
-        status = repo_cmd("git", "clone", repo, git_dir)
-        if status != 0:
-            fatal_error("Could not checkout the repo " + repo)
+        # clone the repo, or do a fetch, if we already have a .git dir
+        if (git_dir / ".git").is_dir():
+            logger.debug("Fetching the repo")
+            status = repo_cmd("git", "fetch", "--tags")
+            if status != 0:
+                fatal_error("Could not fetch the repo " + repo)
+        else:
+            logger.debug("Cloning the repo")
+            status = repo_cmd("git", "clone", repo, git_dir)
+            if status != 0:
+                fatal_error("Could not clone the repo " + repo)
 
         # checkout the right version
         if args.version:
@@ -127,16 +107,42 @@ if __name__ == "__main__":
 
         version_name = args.version or (datetime.now().strftime("%Y-%m-%d-") + git_hash)
 
+        # figure out what we're building
+        try:
+            with open(git_dir / "builds.yaml", 'r') as stream:
+                try:
+                    builds = yaml.load(stream)
+                except yaml.YAMLError as exc:
+                    print(exc)
+                    exit(1)
+        except FileNotFoundError:
+            fatal_error("Did not find a builds.yaml file in the directory " + git_dir)
+
+        flavors = builds.get("flavors", {})
+        if args.flavor not in flavors:
+            fatal_error("Flavor with name '%s' not found. Choices are: %s" % (args.flavor, ", ".join(flavors)))
+        flavor = build['flavors'][args.flavor]
+
         # run the build script
-        if build.get("script"):
+        if builds.get("script"):
             logger.debug("Running the build script")
-            status = repo_cmd(build['script'], shell=True)
+            status = repo_cmd(builds['script'], shell=True)
             if status != 0:
-                fatal_error("The build script blew up. Tried to execute: \n" + build['script'])
+                fatal_error("The build script blew up. Tried to execute: \n" + builds['script'])
+
+        custom_files_dir = tmp_dir / "customfiles"
+        shutil.copytree(here / "customfiles", custom_files_dir)
+        # merge in the git repo's custom files
+
+        # walk all the custom files, and customize them with Jinja
+        for d, dirs, files in os.walk(custom_files_dir):
+            for f in files:
+                full_path = os.path.join(d, f)
+                render_to_file(full_path, full_path, **flavor, app_name=app, flavor_name=args.flavor)
 
         # now we need to fetch all the packages required for this app
         # TODO package file caching
-        packages_file_path = build.get("packages")
+        packages_file_path = builds.get("packages")
         packages_dir = tmp_dir / "packages"
         packages = set()
         os.mkdir(packages_dir)
@@ -160,10 +166,14 @@ if __name__ == "__main__":
                 fatal_error("Could not install the package " + package)
 
         # copy the source code into opt
-        opt_dir = custom_files_dir / "opt" / app
+        opt_dir = custom_files_dir / builds.get('app_dir', "/opt/app").lstrip("/")
         os.makedirs(opt_dir)
-        os.rename(git_dir, opt_dir)
+        #os.rename(git_dir, opt_dir)
+        # shutil.copytree is crappy
+        subprocess.call(["cp", "-r", git_dir + "/.", opt_dir])
+        #shutil.copytree(git_dir, opt_dir)
         # don't need the .git dir
+        shutil.rmtree(opt_dir / ".git")
         shutil.rmtree(opt_dir / ".git")
 
         # now build the image
